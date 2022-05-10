@@ -1,4 +1,5 @@
 .vscode/settings.json
-scr/utils/pintos
-scr/utils/pintos.pm
-scr/utils/pintos-gdb
+src/utils/pintos
+src/utils/pintos.pm
+src/utils/pintos-gdb
+
