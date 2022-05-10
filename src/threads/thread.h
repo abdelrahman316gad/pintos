@@ -110,7 +110,7 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
-
+bool comparePriority(const struct list_elem *first, const struct list_elem *second, void * aux UNUSED);
 void thread_tick (void);
 void thread_print_stats (void);
 
