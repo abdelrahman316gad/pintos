@@ -95,6 +95,7 @@ bool compare(const struct list_elem *first, const struct list_elem *second, void
 void
 timer_sleep (int64_t ticks) 
 {
+  printf("lol\n\n\n");
   int64_t start = timer_ticks ();
   ASSERT (intr_get_level () == INTR_ON);
    enum intr_level old_level;

@@ -24,7 +24,6 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
-
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
@@ -71,8 +70,10 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-
-
+bool
+comparePriority(const struct list_elem *first, const struct list_elem *second, void * aux UNUSED){
+    return (list_entry(first,struct thread,elem))->priority > (list_entry(second,struct thread,elem))->priority;
+}
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -94,15 +95,14 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  
+
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-
 }
-void thread_sleep (int64_t ticks2);
+
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
 void
@@ -203,6 +203,10 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  if(thread_current()->priority < priority)
+  {
+      thread_yield();
+  }
 
   return tid;
 }
@@ -235,13 +239,19 @@ void
 thread_unblock (struct thread *t) 
 {
   enum intr_level old_level;
+
   ASSERT (is_thread (t));
-   
+
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(& ready_list, & t->elem, & comparePriority, NULL);
+//  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+ if(thread_current() != idle_thread && thread_get_priority() < t->priority)
+ {
+     thread_yield();
+ }
 }
 
 /* Returns the name of the running thread. */
@@ -309,10 +319,15 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  if (cur != idle_thread)
+  {
+      list_insert_ordered(& ready_list, & cur->elem, & comparePriority, NULL);
+//      list_push_back(&ready_list, &cur->elem);
+  }
   cur->status = THREAD_READY;
   schedule ();
+  cur = thread_current ();
+  thread_set_priority(cur->priority);
   intr_set_level (old_level);
 }
 
@@ -338,6 +353,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  // sort
 }
 
 /* Returns the current thread's priority. */
@@ -458,7 +474,7 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-
+  
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
