@@ -70,7 +70,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-static bool
+
+bool
 comparePriority(const struct list_elem *first, const struct list_elem *second, void * aux UNUSED){
     return (list_entry(first,struct thread,elem))->priority > (list_entry(second,struct thread,elem))->priority;
 }
@@ -244,7 +245,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(& ready_list, & t->elem, comparePriority, NULL);
+  list_insert_ordered(& ready_list, & t->elem, &comparePriority, NULL);
 //  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
 
@@ -322,7 +323,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread)
   {
-      list_insert_ordered(& ready_list, & cur->elem, comparePriority, NULL);
+      list_insert_ordered(& ready_list, & cur->elem, &comparePriority, NULL);
 //      list_push_back(&ready_list, &cur->elem);
   }
   cur->status = THREAD_READY;
