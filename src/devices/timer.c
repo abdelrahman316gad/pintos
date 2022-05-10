@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -19,7 +20,6 @@
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
-/* list which will contain blocked threads */
 static struct list blocked_list;
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -85,7 +85,6 @@ timer_elapsed (int64_t then)
 {
   return timer_ticks () - then;
 }
-/* function is used to compare between two elements */
 bool compare(const struct list_elem *first, const struct list_elem *second, void * aux UNUSED) {
     int64_t wakupfirst=(list_entry(first,struct thread,elem))->wake_up;
     int64_t wakupsecond=(list_entry(second,struct thread,elem))->wake_up;
@@ -96,16 +95,15 @@ bool compare(const struct list_elem *first, const struct list_elem *second, void
 void
 timer_sleep (int64_t ticks) 
 {
-int64_t start = timer_ticks ();
+  int64_t start = timer_ticks ();
   ASSERT (intr_get_level () == INTR_ON);
    enum intr_level old_level;
   old_level = intr_disable ();
   thread_current()->wake_up=start+ticks;
-  /* insert threads in block list sorted and disable interrupt*/
   list_insert_ordered(&blocked_list,&thread_current()->elem,&compare,NULL); 
   thread_block();
   intr_set_level (old_level);
-  /*
+/*
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
     */
@@ -187,15 +185,17 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick (); 
-  /* loop on block list and see which one of the threads should be unblocked according to its wakeup time*/
     while (!list_empty(&blocked_list))
     {
          struct thread *start= list_entry ( list_front(&blocked_list),struct thread, elem);
+         
            if(start->wake_up>timer_ticks()){
                 break;
             }
+           
         list_pop_front(&blocked_list);
-        thread_unblock(start);        
+        thread_unblock(start);
+            
     }
 }
 
