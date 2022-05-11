@@ -89,11 +89,12 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-
+    int64_t wake_up;
+ 
+    
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    /* wake_up time for each thread*/
-     int64_t wake_up;
+   
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -110,7 +111,7 @@ extern bool thread_mlfqs;
 
 void thread_init (void);
 void thread_start (void);
-bool comparePriority(const struct list_elem *first, const struct list_elem *second, void * aux UNUSED);
+
 void thread_tick (void);
 void thread_print_stats (void);
 
