@@ -217,7 +217,7 @@ thread_create (const char *name, int priority,
       thread_yield();
   }
 */
-  //  preempt();
+   preempt();
   return tid;
 }
 
