@@ -75,16 +75,6 @@ bool
 comparePriority(const struct list_elem *first, const struct list_elem *second, void * aux UNUSED){
     return (list_entry(first,struct thread,elem))->priority > (list_entry(second,struct thread,elem))->priority;
 }
-void preempt()
-{
-    enum intr_level old_level = intr_disable();
-    struct thread *temp = list_entry(list_front(& ready_list), struct thread, elem);
-    if(!list_empty(& ready_list) && thread_current()->priority < temp->priority)
-    {
-        thread_yield();
-    }
-    intr_set_level(old_level);
-}
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -214,7 +204,11 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  preempt();
+  if(thread_current()->priority < priority)
+  {
+      thread_yield();
+  }
+
   return tid;
 }
 
@@ -251,9 +245,14 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(& ready_list, & t->elem, comparePriority, NULL);
+  list_insert_ordered(& ready_list, & t->elem, &comparePriority, NULL);
 //  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
+
+ if(thread_current() != idle_thread && thread_get_priority() < t->priority)
+ {
+     thread_yield();
+ }
     intr_set_level (old_level);
 }
 
@@ -329,8 +328,8 @@ thread_yield (void)
   }
   cur->status = THREAD_READY;
   schedule ();
-//  cur = thread_current ();
-//  thread_set_priority(cur->priority);
+  cur = thread_current ();
+  thread_set_priority(cur->priority);
   intr_set_level (old_level);
 }
 
