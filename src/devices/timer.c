@@ -188,17 +188,14 @@ timer_interrupt (struct intr_frame *args UNUSED)
     while (!list_empty(&blocked_list))
     {
          struct thread *start= list_entry ( list_front(&blocked_list),struct thread, elem);
-         
            if(start->wake_up>timer_ticks()){
                 break;
             }
-           
         list_pop_front(&blocked_list);
         thread_unblock(start);
             
     }
 }
-
 /* Returns true if LOOPS iterations waits for more than one timer
    tick, otherwise false. */
 static bool
