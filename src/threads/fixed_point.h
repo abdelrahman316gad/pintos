@@ -5,19 +5,19 @@
 
 struct fixed_point
 {
-    int num = 0;
+    int num ;
 };
 
-void init_fixed_point(fixed_point* a, int num);
+void init_fixed_point(struct fixed_point* a, int num);
 
 
-int add(fixed_point* a, fixed_point *b);
-int sub(fixed_point* a, fixed_point *b);
+int add(int a,int b);
+int sub(int a,int b);
 
-int multiple(fixed_point* a, fixed_point *b);
+int multiple(int a,int b);
 
-int divide(fixed_point* a, fixed_point *b);
+int divide(int a,int b);
 
-int convert_to_int(fixed_point* a);
+int convert_to_int(int a);
 
 
