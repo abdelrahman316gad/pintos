@@ -8,7 +8,7 @@ struct fixed_point
     int num ;
 };
 
-void init_fixed_point(struct fixed_point* a, int num);
+int init_fixed_point(struct fixed_point* a, int num);
 
 
 int add(int a,int b);
