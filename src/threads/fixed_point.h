@@ -1,6 +1,6 @@
 #include <stddef.h>
 #include <stdio.h> 
-#define FIXED_POINT_PLACE 16
+#define FIXED_POINT_PLACE 14
 
 
 struct fixed_point

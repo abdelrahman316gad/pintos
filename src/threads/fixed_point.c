@@ -23,7 +23,7 @@ int divide(int a, int b){
 }
 
 int convert_to_int(int a){
-    int draft = a && 1 << 15 ;
+    int draft = a && 1 << FIXED_POINT_PLACE-1 ;
     int res = a>> FILENAME_MAX ;
     return res+ draft ;
 
