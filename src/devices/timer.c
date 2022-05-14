@@ -185,6 +185,17 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick (); 
+    if (thread_mlfqs)
+    {
+      thread_current()->recent_cpu=thread_current()->recent_cpu+convert_to_fixed_point(1);
+      if (ticks % TIMER_FREQ == 0){
+        thread_calculate_load_avg();
+        thread_calculate_all_recent_cpu();
+      }
+      if (ticks % 4 == 3)
+        thread_calculate_all_priority ();
+    }
+    
     while (!list_empty(&blocked_list))
     {
          struct thread *start= list_entry ( list_front(&blocked_list),struct thread, elem);

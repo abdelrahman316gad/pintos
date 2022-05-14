@@ -24,6 +24,11 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* Thread nice. */
+#define NICE_MIN -20                    /* Lowest nice. */
+#define NICE_DEFAULT 0                  /* Default nice. */
+#define NICE_MAX 20                     /* Highest nice. */
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -101,6 +106,9 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    int nice;
+    int recent_cpu;
+    
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
 };
@@ -140,5 +148,29 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+void thread_calculate_load_avg(void);
+void thread_calculate_recent_cpu(struct thread *t);
+void thread_calculate_all_recent_cpu(void);
+void thread_calculate_priority(struct thread *t);
+void thread_calculate_all_priority(void);
+#define FIXED_POINT_PLACE 14
+
+struct fixed_point
+{
+    int num ;
+};
+
+int convert_to_fixed_point(int num);
+
+
+int add(int a,int b);
+int sub(int a,int b);
+
+
+int multiple(int a,int b);
+int divide(int a,int b);
+
+int convert_to_int(int a);
+int convert_to_nearest_int(int a);
 
 #endif /* threads/thread.h */

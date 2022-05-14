@@ -202,37 +202,40 @@ lock_acquire (struct lock *lock)
     enum intr_level  old_level = intr_disable ();
     struct thread *lock_holder = lock->holder;
     struct thread *cur = thread_current();
-    if(lock_holder != NULL)
-    {
-        if(cur->priority > lock_holder->priority)
+    if(!thread_mlfqs){
+        if(lock_holder != NULL)
         {
-            lock_holder->priority = cur->priority;
-            cur->thread_waiting_for = lock_holder;
-            list_insert_ordered(&(lock->holder->threads_waiting), &cur->wait_elem, &compare_priority,NULL);
-            while (lock_holder->status == THREAD_BLOCKED)
+            if(cur->priority > lock_holder->priority)
             {
-                int x = lock_holder->priority;
-                lock_holder = lock_holder->thread_waiting_for;
-                if(lock_holder == NULL)
-                    break;
-                if(lock_holder->priority < x)
-                    lock_holder->priority = x;
-//                struct thread *lock_holder_next = lock_holder->thread_waiting_for;
-//                if (lock_holder_next == NULL)
-//                {
-//                    break;
-//                }
-//                if(lock_holder_next->priority < lock_holder->priority)
-//                {
-//                    lock_holder_next->priority = lock_holder->priority;
-//                }
+                lock_holder->priority = cur->priority;
+                cur->thread_waiting_for = lock_holder;
+                list_insert_ordered(&(lock->holder->threads_waiting), &cur->wait_elem, &compare_priority,NULL);
+                while (lock_holder->status == THREAD_BLOCKED)
+                {
+                    int x = lock_holder->priority;
+                    lock_holder = lock_holder->thread_waiting_for;
+                    if(lock_holder == NULL)
+                        break;
+                    if(lock_holder->priority < x)
+                        lock_holder->priority = x;
+    //                struct thread *lock_holder_next = lock_holder->thread_waiting_for;
+    //                if (lock_holder_next == NULL)
+    //                {
+    //                    break;
+    //                }
+    //                if(lock_holder_next->priority < lock_holder->priority)
+    //                {
+    //                    lock_holder_next->priority = lock_holder->priority;
+    //                }
 
+                }
             }
         }
     }
     sema_down (&lock->semaphore);
     lock->holder = thread_current();
     intr_set_level(old_level);
+    
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -268,43 +271,46 @@ lock_release (struct lock *lock)
     struct thread *cur= thread_current();
     struct thread* helping_thread;
     struct semaphore *sema = &lock->semaphore;
-    if (!list_empty (&sema->waiters))
-    {
-        list_sort(&sema->waiters,&compare_priority,NULL);
-        helping_thread = list_entry (list_pop_front (&sema->waiters),struct thread, elem);
-        thread_unblock (helping_thread);
-        helping_thread->thread_waiting_for = NULL;
+    if(!thread_mlfqs){
+        if (!list_empty (&sema->waiters))
+        {
+            list_sort(&sema->waiters,&compare_priority,NULL);
+            helping_thread = list_entry (list_pop_front (&sema->waiters),struct thread, elem);
+            thread_unblock (helping_thread);
+            helping_thread->thread_waiting_for = NULL;
+            if(!list_empty(&cur->threads_waiting))
+            {
+                list_remove(&helping_thread->wait_elem);
+            }
+            for(struct list_elem *e = list_begin(&sema->waiters); e != list_end(&sema->waiters); e= list_next(e))
+            {
+                struct thread *temp = list_entry(e, struct thread, elem);
+                list_remove(&temp->wait_elem);
+                temp->thread_waiting_for = helping_thread;
+                list_insert_ordered(&helping_thread->threads_waiting, &temp->wait_elem, &compare_priority, NULL);
+            }
+        }
         if(!list_empty(&cur->threads_waiting))
         {
-            list_remove(&helping_thread->wait_elem);
-        }
-        for(struct list_elem *e = list_begin(&sema->waiters); e != list_end(&sema->waiters); e= list_next(e))
-        {
-            struct thread *temp = list_entry(e, struct thread, elem);
-            list_remove(&temp->wait_elem);
-            temp->thread_waiting_for = helping_thread;
-            list_insert_ordered(&helping_thread->threads_waiting, &temp->wait_elem, &compare_priority, NULL);
-        }
-    }
-    if(!list_empty(&cur->threads_waiting))
-    {
-        cur->priority = cur->actual_priority;
-        struct thread *temp =list_entry(list_front(&cur->threads_waiting), struct thread, wait_elem);
-        if(&cur->priority < &temp->priority)
-        {
-            cur-> priority = temp->priority;
+            cur->priority = cur->actual_priority;
+            struct thread *temp =list_entry(list_front(&cur->threads_waiting), struct thread, wait_elem);
+            if(&cur->priority < &temp->priority)
+            {
+                cur-> priority = temp->priority;
+            }
+            else
+            {
+                cur->priority = cur->actual_priority;
+            }
         }
         else
         {
             cur->priority = cur->actual_priority;
         }
     }
-    else
-    {
-        cur->priority = cur->actual_priority;
-    }
     lock->holder = NULL;
     sema_up(&lock->semaphore);
+    
 }
 
 /* Returns true if the current thread holds LOCK, false
