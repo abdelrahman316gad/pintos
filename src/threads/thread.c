@@ -384,13 +384,33 @@ void
 thread_set_nice (int nice UNUSED)
 {
     ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
-    
+    // enum intr_level old_level = intr_disable ();
     struct thread* t = thread_current();
     t->nice=nice;
-    printf ("nice set ->%d\n", t->nice);
+    // printf ("nice set ->%d\n", t->nice);
     thread_calculate_recent_cpu(t);
     thread_calculate_priority(t);
-    
+  /* if(t!=idle_thread)
+   {
+       struct thread *x=list_entry (list_begin (&ready_list),struct thread,elem);
+        if (t->status == THREAD_READY)
+        {
+            printf("2na ready\n");
+            enum intr_level old_level;
+            old_level = intr_disable ();
+            list_remove (&t->elem);
+            list_insert_ordered (&ready_list, &t->elem, compare_priority, NULL);
+            intr_set_level (old_level);
+        }
+        else if (t->status == THREAD_RUNNING &&x->priority > t->priority){
+            if (t->status==THREAD_RUNNING)
+            printf ("x->%d > t->%d\n",x->priority , t->priority);
+            printf("before -> %d\n",thread_current()->tid);
+            thread_yield();
+            printf("after -> %d\n",thread_current()->tid);
+        }
+   }
+    intr_set_level (old_level);
     /*
             printf("before -> %d\n",thread_current()->tid);
             printf("before -> %s\n",thread_current()->status);
@@ -420,26 +440,7 @@ thread_set_nice (int nice UNUSED)
             }
         e = list_next (e);
     }
-    
-   if(t!=idle_thread)
-   {
-       struct thread *x=list_entry (list_begin (&ready_list),struct thread,elem);
-        if (t->status == THREAD_READY)
-        {
-            printf("2na ready\n");
-            enum intr_level old_level;
-            old_level = intr_disable ();
-            list_remove (&t->elem);
-            list_insert_ordered (&ready_list, &t->elem, compare_priority, NULL);
-            intr_set_level (old_level);
-        }
-        else if (t->status == THREAD_RUNNING &&x->priority > t->priority){
-            printf ("x->%d > t->%d\n",x->priority , t->priority);
-            printf("2na hyeald\n");
-            thread_yield();
-
-        }
-   }*/
+    */
 }
 
 /* Returns the current thread's nice value. */
