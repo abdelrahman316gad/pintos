@@ -190,6 +190,9 @@ thread_create (const char *name, int priority,
     init_thread (t, name, priority);
     tid = t->tid = allocate_tid ();
 
+    if (thread_mlfqs)
+        thread_calculate_priority(t);
+
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame (t, sizeof *kf);
     kf->eip = NULL;
@@ -208,8 +211,6 @@ thread_create (const char *name, int priority,
     /* Add to run queue. */
     thread_unblock (t);
 
-    if (thread_mlfqs)
-        thread_calculate_priority(t);
 
     if(t->priority > running_thread()->priority){
         thread_yield();
@@ -383,10 +384,62 @@ void
 thread_set_nice (int nice UNUSED)
 {
     ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
+    
     struct thread* t = thread_current();
     t->nice=nice;
+    printf ("nice set ->%d\n", t->nice);
     thread_calculate_recent_cpu(t);
     thread_calculate_priority(t);
+    
+    /*
+            printf("before -> %d\n",thread_current()->tid);
+            printf("before -> %s\n",thread_current()->status);
+
+            thread_yield();     
+            printf("after -> %d\n",thread_current()->tid);
+            printf("after -> %d\n",thread_current()->status);
+    
+    struct list_elem *e;
+    e = list_begin (&ready_list);
+    while (e != list_end (&ready_list))
+    {   
+         struct thread *x= list_entry ( e,struct thread, elem);
+            printf ("x->%d > t->%d\n",x->priority , t->priority);
+
+           if(x->priority > t->priority&&x->priority!=63){
+
+            printf("before -> %d\n",thread_current()->tid);
+
+            thread_yield();     
+            printf("after -> %d\n",thread_current()->tid);
+
+            }
+            else if(x->priority!=63) {
+                printf("lol\n");
+              break;  
+            }
+        e = list_next (e);
+    }
+    
+   if(t!=idle_thread)
+   {
+       struct thread *x=list_entry (list_begin (&ready_list),struct thread,elem);
+        if (t->status == THREAD_READY)
+        {
+            printf("2na ready\n");
+            enum intr_level old_level;
+            old_level = intr_disable ();
+            list_remove (&t->elem);
+            list_insert_ordered (&ready_list, &t->elem, compare_priority, NULL);
+            intr_set_level (old_level);
+        }
+        else if (t->status == THREAD_RUNNING &&x->priority > t->priority){
+            printf ("x->%d > t->%d\n",x->priority , t->priority);
+            printf("2na hyeald\n");
+            thread_yield();
+
+        }
+   }*/
 }
 
 /* Returns the current thread's nice value. */
@@ -409,9 +462,8 @@ int
 thread_get_recent_cpu (void)
 {
     /* Not yet implemented. */            
+   return ( convert_to_nearest_int(thread_current()->recent_cpu * 100));
 
-   return ( convert_to_nearest_int(thread_current()->recent_cpu )* 100);
-   
 }
 
 
@@ -431,9 +483,8 @@ void
 thread_calculate_recent_cpu(struct thread *t)
 {
     ASSERT (is_thread(t));
-    int decay=divide((load_avg * 2) , (load_avg * 2+convert_to_fixed_point(1)));
+    int decay=divide((load_avg * 2) , ((load_avg * 2)+convert_to_fixed_point(1)));
     t->recent_cpu=multiple(t->recent_cpu , decay) + convert_to_fixed_point(t->nice);
-
 }
 
 void
@@ -478,11 +529,11 @@ int convert_to_fixed_point(int num){
 }
 
 int multiple(int a, int b){
-    return (((int64_t)(a))*b) >> FIXED_POINT_PLACE ;
+    return ((int64_t)(a)) * b / (1 << FIXED_POINT_PLACE);
 }
 
 int divide(int a, int b){
-    return (((int64_t)(a)) / b) << FIXED_POINT_PLACE ;
+    return ((int64_t)(a)) * (1 << FIXED_POINT_PLACE) / b;
 }
 
 int convert_to_int(int a){
@@ -491,9 +542,9 @@ int convert_to_int(int a){
 
 int convert_to_nearest_int(int a){
     if(a >= 0)
-    return (a +(( 1 << FIXED_POINT_PLACE ) / 2)) >> FIXED_POINT_PLACE ;
+    return (a +(( 1 << FIXED_POINT_PLACE ) / 2)) / ( 1 << FIXED_POINT_PLACE ) ;
     else
-    return (a -(( 1 << FIXED_POINT_PLACE ) / 2)) >> FIXED_POINT_PLACE ;
+    return (a -(( 1 << FIXED_POINT_PLACE ) / 2)) / ( 1 << FIXED_POINT_PLACE ) ;
 }
 
 
@@ -592,10 +643,9 @@ init_thread (struct thread *t, const char *name, int priority)
     if(thread_mlfqs){
         t->nice=NICE_DEFAULT;
         if (t == initial_thread){
-            t->recent_cpu= 1;
+            t->recent_cpu= 0;
         }            
         else{
-            t->recent_cpu= 0;
             t->recent_cpu= thread_get_recent_cpu ();
 
         }
