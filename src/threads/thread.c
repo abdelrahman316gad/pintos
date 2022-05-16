@@ -478,12 +478,6 @@ thread_calculate_all_priority(void)
     list_sort(&ready_list,&compare_priority,NULL);
 }
 
-/* Convert the int number to fixed point form */
-int
-convert_to_fixed_point(int num){
-   return num << FIXED_POINT_PLACE ;
-}
-
 /* Multiple two fixed points */
 int
 multiple(int a, int b){
@@ -495,8 +489,19 @@ int
 divide(int a, int b){
     return ((int64_t)(a)) * (1 << FIXED_POINT_PLACE) / b;
 }
+/*  if we want two add or suptract two fixed point we use the normal + and -
+    if we want two add or suptract a fixed point and(from) int (or vice fersa) we convert the int to fixed point then use the normal + and -
+    if we want two multiple or divide two fixed point we use the functions that we made
+    if we want two multiple or divide a fixed point with(by) int (or vice fersa) we use the normal * and /
+*/
 
-/* Convert a fixed point number to int form */
+/* Convert a number from int form to fixed point form */
+int
+convert_to_fixed_point(int num){
+   return num << FIXED_POINT_PLACE ;
+}
+
+/* Convert a number from fixed point form to int form */
 int
 convert_to_nearest_int(int a){
     if(a >= 0)
