@@ -211,7 +211,7 @@ thread_create (const char *name, int priority,
     /* Add to run queue. */
     thread_unblock (t);
 
-
+    // we check if the current thread priority is lower than new set created to preempt it .
     if(t->priority > running_thread()->priority){
         thread_yield();
     }
