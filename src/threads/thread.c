@@ -321,6 +321,7 @@ thread_yield (void)
     ASSERT (!intr_context ());
 
     old_level = intr_disable ();
+    // we insert the thread in their priority order.
     if (cur != idle_thread)
         list_insert_ordered(&ready_list, &cur->elem, &compare_priority, NULL);
     cur->status = THREAD_READY;

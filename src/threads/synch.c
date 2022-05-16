@@ -68,6 +68,7 @@ sema_down (struct semaphore *sema)
     old_level = intr_disable ();
     while (sema->value == 0)
     {
+        // we insert the thread in their priority order.
         list_insert_ordered (&sema->waiters, &thread_current()->elem,&compare_priority,NULL);
         thread_block ();
     }
@@ -381,6 +382,7 @@ cond_wait (struct condition *cond, struct lock *lock)
     ASSERT (lock_held_by_current_thread (lock));
     waiter.t = thread_current();
     sema_init (&waiter.semaphore, 0);
+    // we insert the semaphores in order according to their thread priority.
     list_insert_ordered (&cond->waiters, &waiter.elem, &compare_sema ,NULL);
     lock_release (lock);
     sema_down (&waiter.semaphore);
@@ -401,7 +403,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
     ASSERT (lock != NULL);
     ASSERT (!intr_context ());
     ASSERT (lock_held_by_current_thread (lock));
-
+    // we get the sema that has the thread of the higher priority .
     if (!list_empty (&cond->waiters))
         sema_up (&list_entry (list_pop_front (&cond->waiters),
     struct semaphore_elem, elem)->semaphore);

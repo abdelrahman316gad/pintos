@@ -20,6 +20,7 @@
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
+/// we intialze block list that will contain all blocked threads
 static struct list blocked_list;
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -100,6 +101,7 @@ timer_sleep (int64_t ticks)
    enum intr_level old_level;
   old_level = intr_disable ();
   thread_current()->wake_up=start+ticks;
+  /// we insert threads inside block list according to their wake_up time
   list_insert_ordered(&blocked_list,&thread_current()->elem,&compare,NULL); 
   thread_block();
   intr_set_level (old_level);
@@ -194,6 +196,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     
     while (!list_empty(&blocked_list))
     {
+      // we check threads wake_up time and compare it with the timerticks if it is smaller or equal we unblock it and remove the thread from block list.
          struct thread *start= list_entry ( list_front(&blocked_list),struct thread, elem);
            if(start->wake_up>timer_ticks()){
                 break;
