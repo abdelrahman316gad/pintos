@@ -7,10 +7,11 @@
 ---- GROUP ----
 
 >> Fill in the names and email addresses of your group members.
+Abdelrahman Elsayed Ahmed 19015893
+Abdelrahman Elsayed Gad 19015894
+Abdelaziz Mohmed Abdelaziz 19015941
+Omar Khayrat Mohamed 19016063
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
 
 ---- PRELIMINARIES ----
 
@@ -30,26 +31,59 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+We edited struct "thread" at "thread.h" by adding "int64_t wake_up" which indicates number of ticks that the thread will be bocked
+
+
+struct list blocked_list;
+we modified "timer.c" by adding "blocked_list" which contain all threads that have been blocked 
+
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+in "void timer_sleep":
+	-Interrupt disable
+	-Assign the wake up of the current thread by timer ticks
+	-Insert the current in the blocked list using the function "list_insert_ordered" accourding to their wake up time
+	-block the current thread
+	-Enable the interrupt
+
+and we added function "boolean compare (const struct list_elem *first, const struct list_elem *second, void * aux UNUSED)" in "timer.c" :
+	which first indicate thread
+		second indicate another thread
+	we use this function to compare the wake up time between the 2 threads
+
+in "void timer_interrupt" in "timer.c":
+	we loop on the block_list
+	we check the wake up time of the thread if it is smaller than or equal timer ticks
+	if true, we pop the thread from the block list and unblock this thread
+	else, we exit this loop
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+
+by inserting a threads that should be blocked in ordered list according to their wake_up time and then we check wake_up time and current ticks if it is smaller or equal we unblock this thread and remove it from block list which help us to minimize the amount of time spent 
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
+We use synchronization tools like simaphores, conditions and lock 
+And we disable the interrups in during using them
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+We disable the interrupt
+
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+Because it is an effective and efficient way to avoid busy wating
+
 
              PRIORITY SCHEDULING
              ===================
@@ -59,6 +93,9 @@ FirstName LastName <email@domain.example>
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+
+We edited struct "thread" at "thread.h" by adding new members ""
+
 
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
@@ -95,6 +132,14 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+We edited struct "thread" at "thread.h" by adding :
+ 	"int nice" which indicate to the Nice value
+ 	"int recent_cpu" which indicate to the Recent CPU
+
+In thread.c we declared :
+	"int load_avg" which estimates average number of threads ready to run over the past minute
+
+
 ---- ALGORITHMS ----
 
 >> C2: Suppose threads A, B, and C have nice values 0, 1, and 2.  Each
@@ -103,25 +148,37 @@ FirstName LastName <email@domain.example>
 >> thread after each given number of timer ticks:
 
 timer  recent_cpu    priority   thread
-ticks   A   B   C   A   B   C   to run
+ticks   A   B   C    A   B   C   to run
 -----  --  --  --  --  --  --   ------
- 0
- 4
- 8
-12
-16
-20
-24
-28
-32
-36
+0       0   0   0   63   61  59    A 
+4       4   0   0   62   61  59    A 
+8       8   0   0   61   61  59    B 
+12      8   4   0   61   60  59    A 
+16     12   4   0   60   60  59    B 
+20     12   8   0   60   59  59    A 
+24     16   8   0   59   59  59    C 
+28     16   8   4   59   59  58    B 
+32     16   12  4   59   58  58    A 
+36     20   12  4   58   58  58    C 
+
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
 
+Yes. there are always threads of the same priority.
+we follow the FIFO principle. The thread first enters the priority queue (of a certain value) will be executed first as we yield every new thread after creation and chooses the firstthread with the highst priority in the queue (it can wake immediately if it is the only thread that have has the highest priority).
+
+
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
+
+If the CPU spends too much time on calculations for recent_cpu, load_avg and priority, then it takes away most of the time that a thread before enforced preemption.
+Then this thread can not get enough running time as expected and it will run longer. 
+This will cause itself got blamed for occupying more CPU time, and raise its load_avg, recent_cpu, and therefore lower its priority. 
+This may disturb the scheduling decisions making. Thus, if the cost of scheduling inside the interrupt context goes up, it will lower performance.
+
+
 
 ---- RATIONALE ----
 
@@ -130,12 +187,26 @@ ticks   A   B   C   A   B   C   to run
 >> time to work on this part of the project, how might you choose to
 >> refine or improve your design?
 
+- Advantages are that it is simple , powerful and very time efficient.
+- Disadvantages whenever we insert a thread into the ready_list, we insert it in order.
+- The time complexity is O(n). Every fourth tick, it is required to calculate priority for all the threads in the all_list. After this, we need to sort the ready_list, which will take O(n lgn) time. 
+- Since we need to do this job every 4 ticks, it will make a thread’s running ticks shorter than it is expected. If n becomes larger, thread switching may happen quite often.
+-if we have extra time we would implement the 64 queue by putting them in array with index equaling to its priority value.When the thread is first inserted, 
+ it only need to index the queue by this thread’s priority. This will takeonly O(1) time. After priority calculation for all threads every fourth tick,
+ it takes O(n) time to re-insert the ready threads. 
+
+
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you
 >> decide to implement it the way you did?  If you created an
 >> abstraction layer for fixed-point math, that is, an abstract data
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
+
+As mentioned in the BSD scheduling manual, recent_cpu and load_avg are real numbers, but pintos disabled float numbers. So instead of using float numbers,
+we used fixed-point numbers to represent recent_cpu and load_avg.
+We used inline functions in thread.c because they are simple and can be debugged easily .
+
 
                SURVEY QUESTIONS
                ================
@@ -160,3 +231,4 @@ the quarter.
 >> students, either for future quarters or the remaining projects?
 
 >> Any other comments?
+
