@@ -104,6 +104,8 @@ thread_init (void)
     initial_thread = running_thread ();
     init_thread (initial_thread, "main", PRI_DEFAULT);
     initial_thread->status = THREAD_RUNNING;
+    initial_thread->nice = NICE_DEFAULT;
+    initial_thread->recent_cpu = 0;
     initial_thread->tid = allocate_tid ();
 }
 
@@ -190,8 +192,6 @@ thread_create (const char *name, int priority,
     init_thread (t, name, priority);
     tid = t->tid = allocate_tid ();
 
-    if (thread_mlfqs)
-        thread_calculate_priority(t);
 
     /* Stack frame for kernel_thread(). */
     kf = alloc_frame (t, sizeof *kf);
@@ -384,63 +384,12 @@ void
 thread_set_nice (int nice UNUSED)
 {
     ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
-    // enum intr_level old_level = intr_disable ();
-    struct thread* t = thread_current();
-    t->nice=nice;
-    // printf ("nice set ->%d\n", t->nice);
-    thread_calculate_recent_cpu(t);
-    thread_calculate_priority(t);
-  /* if(t!=idle_thread)
-   {
-       struct thread *x=list_entry (list_begin (&ready_list),struct thread,elem);
-        if (t->status == THREAD_READY)
-        {
-            printf("2na ready\n");
-            enum intr_level old_level;
-            old_level = intr_disable ();
-            list_remove (&t->elem);
-            list_insert_ordered (&ready_list, &t->elem, compare_priority, NULL);
-            intr_set_level (old_level);
-        }
-        else if (t->status == THREAD_RUNNING &&x->priority > t->priority){
-            if (t->status==THREAD_RUNNING)
-            printf ("x->%d > t->%d\n",x->priority , t->priority);
-            printf("before -> %d\n",thread_current()->tid);
-            thread_yield();
-            printf("after -> %d\n",thread_current()->tid);
-        }
-   }
+    enum intr_level old_level = intr_disable ();
+    thread_current()->nice=nice;
+    thread_calculate_priority(thread_current());
     intr_set_level (old_level);
-    /*
-            printf("before -> %d\n",thread_current()->tid);
-            printf("before -> %s\n",thread_current()->status);
+    thread_yield();
 
-            thread_yield();     
-            printf("after -> %d\n",thread_current()->tid);
-            printf("after -> %d\n",thread_current()->status);
-    
-    struct list_elem *e;
-    e = list_begin (&ready_list);
-    while (e != list_end (&ready_list))
-    {   
-         struct thread *x= list_entry ( e,struct thread, elem);
-            printf ("x->%d > t->%d\n",x->priority , t->priority);
-
-           if(x->priority > t->priority&&x->priority!=63){
-
-            printf("before -> %d\n",thread_current()->tid);
-
-            thread_yield();     
-            printf("after -> %d\n",thread_current()->tid);
-
-            }
-            else if(x->priority!=63) {
-                printf("lol\n");
-              break;  
-            }
-        e = list_next (e);
-    }
-    */
 }
 
 /* Returns the current thread's nice value. */
@@ -495,7 +444,8 @@ thread_calculate_all_recent_cpu(void)
     for (e = list_begin (&all_list); e != list_end (&all_list);e = list_next (e))
     {
         struct thread *t = list_entry (e, struct thread, allelem);
-        thread_calculate_recent_cpu (t);
+        if (t != idle_thread)
+            thread_calculate_recent_cpu (t);
     }        
 }
 
@@ -504,7 +454,7 @@ thread_calculate_priority(struct thread *t)
 {
     ASSERT (is_thread(t));
     if(t!=idle){
-        t->priority=convert_to_nearest_int(convert_to_fixed_point(PRI_MAX)-(t->recent_cpu / 4)-(t->nice * 2));
+        t->priority=convert_to_nearest_int(convert_to_fixed_point(PRI_MAX)-(t->recent_cpu / 4)-convert_to_fixed_point(t->nice * 2));
         if (t->priority > PRI_MAX)
             t->priority = PRI_MAX;
         else if (t->priority < PRI_MIN)
@@ -519,7 +469,8 @@ thread_calculate_all_priority(void)
 
     {
         struct thread *t = list_entry (e, struct thread, allelem);
-        thread_calculate_priority (t);
+            if (t != idle_thread)
+            thread_calculate_priority (t);
     }        
     list_sort(&ready_list,&compare_priority,NULL);
     //third place to check for errors
@@ -641,16 +592,9 @@ init_thread (struct thread *t, const char *name, int priority)
         t->actual_priority = priority;
     }
 
-    if(thread_mlfqs){
-        t->nice=NICE_DEFAULT;
-        if (t == initial_thread){
-            t->recent_cpu= 0;
-        }            
-        else{
-            t->recent_cpu= thread_get_recent_cpu ();
+    t->nice=running_thread()->nice;
+    t->recent_cpu=running_thread()->recent_cpu;
 
-        }
-    }
 
     t->magic = THREAD_MAGIC;
     list_init(&t->threads_waiting);
