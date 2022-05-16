@@ -206,33 +206,28 @@ lock_acquire (struct lock *lock)
         {
             if(cur->priority > lock_holder->priority)
             {
+                //if it is higher we donate it the priority
                 lock_holder->priority = cur->priority;
                 cur->thread_waiting_for = lock_holder;
+                 //Then we put it in the list waiting for this thread
                 list_insert_ordered(&(lock->holder->threads_waiting), &cur->wait_elem, &compare_priority,NULL);
-                while (lock_holder->status == THREAD_BLOCKED)
-                {
-                    int x = lock_holder->priority;
-                    lock_holder = lock_holder->thread_waiting_for;
-                    if(lock_holder == NULL)
-                        break;
-                    if(lock_holder->priority < x)
-                        lock_holder->priority = x;
-    //                struct thread *lock_holder_next = lock_holder->thread_waiting_for;
-    //                if (lock_holder_next == NULL)
-    //                {
-    //                    break;
-    //                }
-    //                if(lock_holder_next->priority < lock_holder->priority)
-    //                {
-    //                    lock_holder_next->priority = lock_holder->priority;
-    //                }
-
-                }
+                //Finally we donate the priority of the current thread for the threads chain that the lock holder is waiting for by looping through them and checking
+                //if their priority is smaller
+                 int holder_priority = lock_holder->priority;
+            lock_holder = lock_holder->thread_waiting_for;
+            while (lock_holder != NULL)
+            {
+                if(lock_holder->priority < holder_priority)
+                    lock_holder->priority = holder_priority;
+                holder_priority = lock_holder->priority;
+                lock_holder = lock_holder->thread_waiting_for;
             }
         }
     }
-    
+}
+    //We put the current thread in sema waiters
     sema_down (&lock->semaphore);
+     //We set the current thread as lock holder
     lock->holder = thread_current();
     intr_set_level(old_level);
 
