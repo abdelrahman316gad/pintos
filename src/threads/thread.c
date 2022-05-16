@@ -411,12 +411,11 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void)
 {
-    /* Not yet implemented. */            
    return ( convert_to_nearest_int(thread_current()->recent_cpu * 100));
 
 }
 
-
+/* Calculate the new load avg. */
 void
 thread_calculate_load_avg(void)
 {
@@ -426,9 +425,9 @@ thread_calculate_load_avg(void)
     else
         ready_threads=list_size(&ready_list)+1;
     load_avg=multiple(convert_to_fixed_point(59)/60,load_avg)+((convert_to_fixed_point(1)/60)*ready_threads);
-
 }
 
+/* Calculate the new recent cpu. */
 void
 thread_calculate_recent_cpu(struct thread *t)
 {
@@ -437,6 +436,7 @@ thread_calculate_recent_cpu(struct thread *t)
     t->recent_cpu=multiple(t->recent_cpu , decay) + convert_to_fixed_point(t->nice);
 }
 
+/* Calculate the recent cpu for every threads */
 void
 thread_calculate_all_recent_cpu(void)
 {
@@ -449,6 +449,7 @@ thread_calculate_all_recent_cpu(void)
     }        
 }
 
+/* Calculate the new priotity of the thread */
 void
 thread_calculate_priority(struct thread *t)
 {
@@ -461,6 +462,8 @@ thread_calculate_priority(struct thread *t)
             t->priority = PRI_MIN;
     }
 }
+
+/* Calculate the new priotity of all threads */
 void
 thread_calculate_all_priority(void)
 {
@@ -473,34 +476,34 @@ thread_calculate_all_priority(void)
             thread_calculate_priority (t);
     }        
     list_sort(&ready_list,&compare_priority,NULL);
-    //third place to check for errors
 }
 
-int convert_to_fixed_point(int num){
+/* Convert the int number to fixed point form */
+int
+convert_to_fixed_point(int num){
    return num << FIXED_POINT_PLACE ;
 }
 
-int multiple(int a, int b){
+/* Multiple two fixed points */
+int
+multiple(int a, int b){
     return ((int64_t)(a)) * b / (1 << FIXED_POINT_PLACE);
 }
 
-int divide(int a, int b){
+/* Divide two fixed points */
+int
+divide(int a, int b){
     return ((int64_t)(a)) * (1 << FIXED_POINT_PLACE) / b;
 }
 
-int convert_to_int(int a){
-    return a >> FIXED_POINT_PLACE ;
-}
-
-int convert_to_nearest_int(int a){
+/* Convert a fixed point number to int form */
+int
+convert_to_nearest_int(int a){
     if(a >= 0)
     return (a +(( 1 << FIXED_POINT_PLACE ) / 2)) / ( 1 << FIXED_POINT_PLACE ) ;
     else
     return (a -(( 1 << FIXED_POINT_PLACE ) / 2)) / ( 1 << FIXED_POINT_PLACE ) ;
 }
-
-
-
 
 /* Idle thread.  Executes when no other thread is ready to run.
 

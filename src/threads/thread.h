@@ -105,9 +105,9 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
 #endif
-
-    int nice;
-    int recent_cpu;
+   /* mlfqs part */
+    int nice;                           /* Nice value(int) */
+    int recent_cpu;                     /* Recent CPU Value (Fixed Point)*/
     
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -155,22 +155,10 @@ void thread_calculate_priority(struct thread *t);
 void thread_calculate_all_priority(void);
 #define FIXED_POINT_PLACE 14
 
-struct fixed_point
-{
-    int num ;
-};
-
-int convert_to_fixed_point(int num);
-
-
-int add(int a,int b);
-int sub(int a,int b);
-
-
 int multiple(int a,int b);
 int divide(int a,int b);
 
-int convert_to_int(int a);
+int convert_to_fixed_point(int num);
 int convert_to_nearest_int(int a);
 
 #endif /* threads/thread.h */
