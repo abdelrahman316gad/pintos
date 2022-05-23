@@ -99,6 +99,7 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct thread *thread_waiting_for;
+    struct thread *parent ;             /*parent of this thread*/
     struct list threads_waiting;
     struct list_elem wait_elem;
 #ifdef USERPROG
