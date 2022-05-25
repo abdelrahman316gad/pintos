@@ -199,10 +199,28 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
-}
+    struct thread* cur = thread_current();
+    struct thread *child;
+    int child_status=-1;
+
+    child=get_thread(child_tid);
+
+    
+    
+    if(child!=initial_thread && child->parent==cur)
+    {
+        sema_down(&child->sema_wait);
+
+        /*When sema_up(&child->wait) is called in process_exit() control returns here.*/
+        child_status=child->exited;
+        list_remove(&child->child_elem); /*Remove from the child_list of the parent*/
+
+        sema_up(&child->sema_exit);
+    }
+    return child_status;
+  }
 
 /* Free the current process's resources. */
 void
