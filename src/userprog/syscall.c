@@ -5,7 +5,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "process.h"
-
+#include "threads/synch.h"
 
 static void syscall_handler (struct intr_frame *);
 

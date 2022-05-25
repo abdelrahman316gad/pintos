@@ -1,6 +1,10 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#ifndef USERPROG
+#define USERPROG
+#endif
+
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>

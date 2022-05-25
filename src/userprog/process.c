@@ -15,12 +15,13 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-
+#define MAX_ARGS_SIZE 4096
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-
+static int set_up_user_prog_stack (void **esp, char **save_ptr, char* token);
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -29,6 +30,8 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *copy;
+  char *save;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -37,14 +40,80 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  
+  char *my_fn_copy; /*A copy of file_name like fn_copy*/
+  int len_cmd=strlen(file_name);
+  my_fn_copy= palloc_get_page (0);/* Allocate space for your copy*/
+  strlcpy(my_fn_copy,file_name,len_cmd+1);/*Copy into your allocated space the complete command line*/
+  char *save_ptr;
+  char *exec_file_name=strtok_r(my_fn_copy," ",&save_ptr);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
 }
+static int
+set_up_user_prog_stack (void **esp, char **save_ptr, char* token) {
+  int args_pushed;
+  int argc = 0;
+  void* stack_pointer;
 
+  stack_pointer = *esp;
+
+  /* Tokenise file name and push each token on the stack. */
+  do                                                                            
+     {                                                                           
+       size_t len = strlen (token) + 1;                                          
+       stack_pointer = (void*) (((char*) stack_pointer) - len);                  
+       strlcpy ((char*)stack_pointer, token, len);                               
+       argc++;                                   
+       /* Don't push anymore arguments if maximum allowed 
+          have already been pushed. */
+       if (PHYS_BASE - stack_pointer > MAX_ARGS_SIZE)
+          return 0;                              
+       token = strtok_r (NULL, " ", save_ptr);                                  
+     } while (token != NULL);
+  
+  char *arg_ptr = (char*) stack_pointer;                                      
+  
+  /* Round stack pionter down to a multiple of 4. */
+  stack_pointer = (void*) (((intptr_t) stack_pointer) & 0xfffffffc);
+
+  /* Push null sentinel. */
+  stack_pointer = (((char**) stack_pointer) - 1);
+  *((char*)(stack_pointer)) = 0;
+
+  /* Push pointers to arguments. */
+  args_pushed = 0;                                                              
+  while (args_pushed < argc)                                                    
+     {                                                                           
+       while (*(arg_ptr - 1) != '\0')                                            
+         ++arg_ptr;                                                              
+       stack_pointer = (((char**) stack_pointer) - 1);                           
+       *((char**) stack_pointer) = arg_ptr;                                      
+       ++args_pushed;    
+       ++arg_ptr;                                                        
+     }
+
+  /* Push argv. */
+  char** first_arg_pointer = (char**) stack_pointer;
+  stack_pointer = (((char**) stack_pointer) - 1);
+  *((char***) stack_pointer) = first_arg_pointer;
+
+
+  /* Push argc. */
+  int* stack_int_pointer = (int*) stack_pointer;
+  --stack_int_pointer;
+  *stack_int_pointer = argc;
+  stack_pointer = (void*) stack_int_pointer;
+
+  /* Push null sentinel. */
+  stack_pointer = (((void**) stack_pointer) - 1);
+  *((void**)(stack_pointer)) = 0;
+
+  *esp = stack_pointer;
+  return 1;
+}
 /* A thread function that loads a user process and starts it
    running. */
 static void
@@ -59,13 +128,25 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+ 
+  char *tokenP;
+  char* token = strtok_r(file_name, " ",&tokenP);
   success = load (file_name, &if_.eip, &if_.esp);
-
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
 
+  if (!success) 
+  {
+    palloc_free_page (file_name);
+    thread_exit();
+  }
+  else
+  {
+    //set up stack
+    set_up_user_prog_stack(&if_.esp, &tokenP, token);
+  
+  }
+    hex_dump(if_.esp,if_.esp,PHYS_BASE - if_.esp,true);
+    palloc_free_page (file_name);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
