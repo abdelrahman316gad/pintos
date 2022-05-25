@@ -33,6 +33,11 @@ typedef int tid_t;
 #define NICE_DEFAULT 0                  /* Default nice. */
 #define NICE_MAX 20                     /* Highest nice. */
 
+
+#ifdef USERPROG
+#define RET_STATUS_INIT 0
+#define RET_STATUS_ERROR -1
+#endif
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -103,12 +108,23 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct thread *thread_waiting_for;
-    struct thread *parent ;             /*parent of this thread*/
+ //   struct thread *parent ;             /*parent of this thread*/
     struct list threads_waiting;
     struct list_elem wait_elem;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct semaphore sema_wait;         /* Semaphore for process_wait. */
+    struct semaphore sema_exit;         /* Semaphore for process_exit. */
+    struct thread *parent;              /* The parent of the thread */
+    struct file *exec;                  /* The file containing the thread executable */
+    struct list files;                  /* A list of open files */
+    struct list mfiles;                 /* A list of memory mapped files */
+    struct list children;               /* A list of children process */
+    struct list_elem child_elem;        /* List elem for children list */
+    int ret_status;                     /* Return status. */
+    bool exited;                        /* If the process exited? */
+    bool waited;                        /* If parent thread has called wait */
 #endif
    /* mlfqs part */
     int nice;                           /* Nice value(int) */

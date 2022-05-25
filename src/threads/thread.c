@@ -215,6 +215,20 @@ thread_create (const char *name, int priority,
     if(t->priority > running_thread()->priority){
         thread_yield();
     }
+    #ifdef USERPROG
+  sema_init (&t->sema_wait, 0);
+  sema_init (&t->sema_exit, 0);
+  t->ret_status = RET_STATUS_INIT;
+    
+  list_init (&t->children);
+  t->exited = false;
+  t->waited = false;
+  t->parent = thread_current ();
+  if (thread_current () != initial_thread)
+    list_push_back (&thread_current ()->children, &t->child_elem);
+  list_init (&t->files);
+  list_init (&t->mfiles);
+#endif
     return tid;
 }
 

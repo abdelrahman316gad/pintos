@@ -30,9 +30,10 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
-  char *copy;
-  char *save;
+  char *fn_copy_2;
+  char *save_ptr;
   tid_t tid;
+  struct thread *t;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -41,15 +42,29 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
   
-  char *my_fn_copy; /*A copy of file_name like fn_copy*/
-  int len_cmd=strlen(file_name);
-  my_fn_copy= palloc_get_page (0);/* Allocate space for your copy*/
-  strlcpy(my_fn_copy,file_name,len_cmd+1);/*Copy into your allocated space the complete command line*/
-  char *save_ptr;
-  char *exec_file_name=strtok_r(my_fn_copy," ",&save_ptr);
+    fn_copy_2 = malloc ( strlen(file_name) + 1);
+  if (fn_copy_2 == NULL)
+    {
+      palloc_free_page (fn_copy);
+      return TID_ERROR;
+    }
+  strlcpy (fn_copy_2, file_name, PGSIZE);
+  file_name = strtok_r (fn_copy_2, " ", &save_ptr);
 
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  free (fn_copy_2);
+    
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    {
+      palloc_free_page (fn_copy);
+      return tid;
+    }
+
+  t = thread_by_tid (tid);
+  sema_down (&t->sema_wait);
+  if (t->ret_status == RET_STATUS_ERROR)
+    tid = TID_ERROR;
+
   return tid;
 }
 static int
@@ -122,6 +137,9 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  struct thread *cur;
+  char *save_ptr;
+  char *token;
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -129,21 +147,35 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
  
-  char *tokenP;
-  char* token = strtok_r(file_name, " ",&tokenP);
+   char *my_fn_copy; /*A copy of file_name like fn_copy*/
+  int len_cmd=strlen(file_name_);
+  my_fn_copy= palloc_get_page (0);/* Allocate space for your copy*/
+  strlcpy(my_fn_copy,file_name_,len_cmd+1);/*Copy into your allocated space the complete command line*/
+
+  token = strtok_r (file_name, " ", &save_ptr);
   success = load (file_name, &if_.eip, &if_.esp);
+
+  cur = thread_current();
+  
   /* If load failed, quit. */
 
-  if (!success) 
+   if (success) 
   {
-    palloc_free_page (file_name);
-    thread_exit();
+    /* Set up the stack for the user program. */
+    set_up_user_prog_stack (&if_.esp, &save_ptr, token);
+
+    cur->exec = filesys_open (file_name);
+    file_deny_write ( cur->exec );
+    sema_up (&cur->sema_wait);
   }
   else
   {
-    //set up stack
-    set_up_user_prog_stack(&if_.esp, &tokenP, token);
-  
+    /* If load failed, quit. */
+    palloc_free_page (file_name);
+
+    cur->ret_status = RET_STATUS_ERROR;
+    sema_up (&cur->sema_wait);
+    thread_exit ();
   }
     hex_dump(if_.esp,if_.esp,PHYS_BASE - if_.esp,true);
     palloc_free_page (file_name);
