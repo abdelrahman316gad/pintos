@@ -1,3 +1,4 @@
+
 #include "userprog/pagedir.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -247,7 +248,6 @@ active_pd (void)
    lookaside buffer (TLB) to become out-of-sync with the page
    table.  When this happens, we have to "invalidate" the TLB by
    re-activating it.
-
    This function invalidates the TLB if PD is the active page
    directory.  (If PD is not active then its entries are not in
    the TLB, so there is no need to invalidate anything.) */

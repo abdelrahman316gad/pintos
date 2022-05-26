@@ -60,7 +60,7 @@ bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
 bool
-    compare_priority(const struct list_elem * a,const struct list_elem * b,void *aux){
+compare_priority(const struct list_elem * a,const struct list_elem * b,void *aux){
     return list_entry(a,struct thread,elem)->priority > list_entry(b,struct thread,elem)->priority;
 }
 bool
@@ -605,6 +605,14 @@ init_thread (struct thread *t, const char *name, int priority)
 
 
     t->magic = THREAD_MAGIC;
+    sema_init(&t->parent_child_sync,0);
+    sema_init(&t->wait_for_child,0);
+    list_init(&t->children);
+    list_init(&t->user_files);
+    t->waiting_for = -1;
+    t->child_status = -1;
+    t->child_creation_success = 0;
+    t->exit_status = 0;
     list_init(&t->threads_waiting);
     old_level = intr_disable ();
     list_push_back (&all_list, &t->allelem);

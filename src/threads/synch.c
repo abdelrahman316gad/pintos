@@ -69,7 +69,8 @@ sema_down (struct semaphore *sema)
     while (sema->value == 0)
     {
         // we insert the thread in their priority order.
-        list_insert_ordered (&sema->waiters, &thread_current()->elem,&compare_priority,NULL);
+              list_push_back (&sema->waiters, &thread_current ()->elem);
+        // list_insert_ordered (&sema->waiters, &thread_current()->elem,&compare_priority,NULL);
         thread_block ();
     }
     sema->value--;
@@ -119,7 +120,7 @@ sema_up (struct semaphore *sema)
         thread_unblock(list_entry(list_pop_front(&sema->waiters),struct thread, elem));
     }
     sema->value++;
-    thread_yield();
+    // thread_yield();
     intr_set_level (old_level);
 }
 
@@ -261,59 +262,63 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock)
 {
-    ASSERT (lock != NULL);
-    ASSERT (lock_held_by_current_thread (lock));
-    struct thread *cur= thread_current();
-    struct thread* helping_thread;
-    struct semaphore *sema = &lock->semaphore;
-    if(!thread_mlfqs){
-        //we see if sema waiters is not empty
-        if (!list_empty (&sema->waiters))
-        {
-            //we pick the highest priority waiting thread to unblock it and acquire it in the lock after realsing the previous realase it 
-            list_sort(&sema->waiters,&compare_priority,NULL);
-            helping_thread = list_entry (list_pop_front (&sema->waiters),struct thread, elem);
-            thread_unblock (helping_thread);
-            //we set the thread it is waiting for as it now it will acquire the lock .
-            helping_thread->thread_waiting_for = NULL;
-            // we remove the higher priority thread from the thread that relase the lock .
-            if(!list_empty(&cur->threads_waiting))
-            {
-                list_remove(&helping_thread->wait_elem);
-            }
-            // we remove the threads waiting in the semaphore list from the threads wwaiting list that realse the lock and add it to higher priority that now acquire the lock .
-            for(struct list_elem *e = list_begin(&sema->waiters); e != list_end(&sema->waiters); e= list_next(e))
-            {
-                struct thread *temp = list_entry(e, struct thread, elem);
-                list_remove(&temp->wait_elem);
-                temp->thread_waiting_for = helping_thread;
-                list_insert_ordered(&helping_thread->threads_waiting, &temp->wait_elem, &compare_priority, NULL);
-            }
-        }
-        /// we set the priority of the thread that will acquire the lock to the thread that has the highest priority to its newest thread waiting list if it has a prioiruty larger than its actual priority . 
-        if(!list_empty(&cur->threads_waiting))
-        {
-            cur->priority = cur->actual_priority;
-            struct thread *temp =list_entry(list_front(&cur->threads_waiting), struct thread, wait_elem);
-            if(&cur->priority < &temp->priority)
-            {
-                cur-> priority = temp->priority;
-            }
-            else
-            {
-                cur->priority = cur->actual_priority;
-            }
-        }
-        else
-        {
-            cur->priority = cur->actual_priority;
-        }
-    }
-    enum intr_level old_level = intr_disable ();
-    lock->holder = NULL;
-    sema_up(&lock->semaphore);
-      intr_set_level (old_level);
+    // ASSERT (lock != NULL);
+    // ASSERT (lock_held_by_current_thread (lock));
+    // struct thread *cur= thread_current();
+    // struct thread* helping_thread;
+    // struct semaphore *sema = &lock->semaphore;
+    // if(!thread_mlfqs){
+    //     //we see if sema waiters is not empty
+    //     if (!list_empty (&sema->waiters))
+    //     {
+    //         //we pick the highest priority waiting thread to unblock it and acquire it in the lock after realsing the previous realase it 
+    //         list_sort(&sema->waiters,&compare_priority,NULL);
+    //         helping_thread = list_entry (list_pop_front (&sema->waiters),struct thread, elem);
+    //         thread_unblock (helping_thread);
+    //         //we set the thread it is waiting for as it now it will acquire the lock .
+    //         helping_thread->thread_waiting_for = NULL;
+    //         // we remove the higher priority thread from the thread that relase the lock .
+    //         if(!list_empty(&cur->threads_waiting))
+    //         {
+    //             list_remove(&helping_thread->wait_elem);
+    //         }
+    //         // we remove the threads waiting in the semaphore list from the threads wwaiting list that realse the lock and add it to higher priority that now acquire the lock .
+    //         for(struct list_elem *e = list_begin(&sema->waiters); e != list_end(&sema->waiters); e= list_next(e))
+    //         {
+    //             struct thread *temp = list_entry(e, struct thread, elem);
+    //             list_remove(&temp->wait_elem);
+    //             temp->thread_waiting_for = helping_thread;
+    //             list_insert_ordered(&helping_thread->threads_waiting, &temp->wait_elem, &compare_priority, NULL);
+    //         }
+    //     }
+    //     /// we set the priority of the thread that will acquire the lock to the thread that has the highest priority to its newest thread waiting list if it has a prioiruty larger than its actual priority . 
+    //     if(!list_empty(&cur->threads_waiting))
+    //     {
+    //         cur->priority = cur->actual_priority;
+    //         struct thread *temp =list_entry(list_front(&cur->threads_waiting), struct thread, wait_elem);
+    //         if(&cur->priority < &temp->priority)
+    //         {
+    //             cur-> priority = temp->priority;
+    //         }
+    //         else
+    //         {
+    //             cur->priority = cur->actual_priority;
+    //         }
+    //     }
+    //     else
+    //     {
+    //         cur->priority = cur->actual_priority;
+    //     }
+    // }
+    // enum intr_level old_level = intr_disable ();
+    // lock->holder = NULL;
+    // sema_up(&lock->semaphore);
+    //   intr_set_level (old_level);
+  ASSERT (lock != NULL);
+  ASSERT (lock_held_by_current_thread (lock));
 
+  lock->holder = NULL;
+  sema_up (&lock->semaphore);
 }
 
 /* Returns true if the current thread holds LOCK, false
