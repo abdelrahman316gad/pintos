@@ -1,9 +1,7 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
-#ifndef USERPROG
-#define USERPROG
-#endif
+
 
 #include <debug.h>
 #include <list.h>
@@ -112,20 +110,23 @@ struct thread
  //   struct thread *parent ;             /*parent of this thread*/
     struct list threads_waiting;
     struct list_elem wait_elem;
+
+    struct thread* parent;
+    struct list children;
+    bool child_creation_success; /* Flag for parent-child synchronization*/
+    int child_status; /* Status of child when it exits */
+    tid_t waiting_for; /* tid of the thread i'm waiting for */
+    struct semaphore wait_for_child; /* semaphore for handling waiting for child to exit */
+    struct semaphore parent_child_sync;
+    
+    struct list user_files ;            /* Files opened by thread */
+    int exit_status;
+    struct file * executable;           /* Pointer to executable file */
+    struct list_elem child_elem;        /* List element for children List */
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct semaphore sema_wait;         /* Semaphore for process_wait. */
-    struct semaphore sema_exit;         /* Semaphore for process_exit. */
-    struct thread *parent;              /* The parent of the thread */
-    struct file *exec;                  /* The file containing the thread executable */
-    struct list files;                  /* A list of open files */
-    struct list mfiles;                 /* A list of memory mapped files */
-    struct list children;               /* A list of children process */
-    struct list_elem child_elem;        /* List elem for children list */
-    int ret_status;                     /* Return status. */
-    bool exited;                        /* If the process exited? */
-    bool waited;                        /* If parent thread has called wait */
 #endif
    /* mlfqs part */
     int nice;                           /* Nice value(int) */
@@ -134,6 +135,13 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
 };
+
+ struct  user_file
+ {
+    struct list_elem elem;
+    int fd ;
+    struct  file *  file  ;
+ };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
