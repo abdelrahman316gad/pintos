@@ -18,10 +18,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
- 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-struct thread* child_with_tid(tid_t tid);
+struct thread* child_id(tid_t tid);
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -31,34 +30,42 @@ process_execute (const char *file_name)
 {
     char *fn_copy;
     tid_t tid;
-    char *saveptr1;
     /* Make a copy of FILE_NAME.
     Otherwise there's a race between the caller and load(). */
-
+     char *fn_copy_2;
+     char *save_ptr;  
     fn_copy = palloc_get_page(0);
     if (fn_copy == NULL)
     return TID_ERROR;
     strlcpy(fn_copy, file_name, PGSIZE);
-
-
-    /* Create a new thread to execute FILE_NAME. */
-    tid = thread_create(file_name, PRI_DEFAULT, start_process, fn_copy);
-
-    /* wait for child until it's loaded */
-    sema_down(&thread_current()->parent_child_sync);
-
+    fn_copy_2 = malloc ( strlen(file_name) + 1);
+    if (fn_copy_2 == NULL)
+    {
+      palloc_free_page (fn_copy);
+      return TID_ERROR;
+    }
+    strlcpy (fn_copy_2, file_name, PGSIZE);
+  file_name = strtok_r (fn_copy_2, " ", &save_ptr);
+    tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+    free (fn_copy_2);
+    sema_down(&thread_current()->sema_wait_parent);
     if(tid == TID_ERROR)
         palloc_free_page(fn_copy);
 
-    /* Child is loaded successfully */
     if (thread_current()->child_creation_success)
-    return tid;
-
-    /* Error loading child*/
-
+    {
+        return tid;
+    }  
     return TID_ERROR;
 }
- 
+static void 
+set_up_stack(struct thread * Parent)
+{
+     struct list* Children = &Parent->children;
+      struct thread* Child = thread_current();
+      list_push_back(Children,&Child->child_elem); 
+       Parent->child_creation_success = 1;
+}
 /* A thread function that loads a user process and starts it
    running. */
 static void
@@ -72,27 +79,17 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-
-
   success = load (file_name, &if_.eip, &if_.esp);
-  struct thread* parent = thread_current()->parent;
-
-  if(success){ // Child is loaded successfully
-
-      struct list* children = &parent->children;
-      struct thread* child = thread_current();
-      list_push_back(children,&child->child_elem); // Push current thread in parent children list
-      parent->child_creation_success = 1; // Flag parent that the child is loaded successfully
-      sema_up(&parent->parent_child_sync); // Wake up parent
-      sema_down(&thread_current()->parent_child_sync); // sleep until parent wakes up me
-  }else{ // Error loading file
-        parent->child_creation_success = 0; // Flag parent that the child is not loaded successfully
-        sema_up(&parent->parent_child_sync); // Wake up parent
+  struct thread* Parent = thread_current()->parent;
+  if(success){ 
+      set_up_stack(Parent);
+      sema_up(&Parent->sema_wait_parent); 
+      sema_down(&thread_current()->sema_wait_parent); 
+  }else{     
+        Parent->child_creation_success = 0; 
+        sema_up(&Parent->sema_wait_parent); 
     }
-
-    /* If load failed, quit. */
     palloc_free_page (file_name);
- 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -115,30 +112,26 @@ start_process (void *file_name_)
 int
 process_wait (tid_t tid )
 {
-
-    thread_current()-> waiting_for = tid;
-    struct thread* child = child_with_tid(tid);// Get child with given tid_t
-
-    if(child != NULL){ // Tid is valid
-
-        list_remove(&child->child_elem); // Remove child from children list
-        sema_up(&child->parent_child_sync); // Wake up child
-        sema_down(&thread_current()->wait_for_child); // Wait for child to exit
-        return thread_current()->child_status; // Return state of child after child exits
-
+    struct thread * cur = thread_current(); 
+    cur-> waiting_for = tid;
+    struct thread* Child = child_id(tid);
+    if(Child != NULL){ 
+        list_remove(&Child->child_elem); 
+        sema_up(&Child->sema_wait_parent); 
+       sema_down(&cur->sema_wait_child); 
+        return cur->child_status;
     }
-
-    return -1; // Non valid tid
+    return -1; 
 }
 
 /*
  * Return child with given tid
  * */
-struct thread* child_with_tid(tid_t tid){
-    struct thread* current = thread_current();
-    struct list* children = &current->children;
-    struct list_elem *iter = list_begin(children);
-    while (iter != list_end(children)){
+struct thread* child_id(tid_t tid){
+
+    struct list* Children = &thread_current()->children;
+    struct list_elem *iter = list_begin(Children);
+    while (iter != list_end(Children)){
         struct thread *entry = list_entry(iter,struct thread, child_elem);
         iter = list_next(iter);
         if(entry->tid == tid){
@@ -147,34 +140,23 @@ struct thread* child_with_tid(tid_t tid){
     }
     return NULL;
 }
- 
- 
 /* Free the current process's resources. */
 void
 process_exit (void) {
-    struct thread *cur = thread_current();
-
-
-    if (cur->parent != NULL) {
-        struct thread *parent = cur->parent;
-        if (parent->waiting_for == cur->tid) {  // Parent is waiting for me
-            parent->child_status = thread_current()->exit_status; // Set parent to my exit status
-            parent->waiting_for = -1; // reset waiting for tid
-            parent->child_creation_success = 0; // reset child creation success
-            sema_up(&parent->wait_for_child); // Wake up parent
+    
+    if (thread_current()->parent != NULL ) {
+        struct thread *parent = thread_current()->parent;
+        if (parent->waiting_for == thread_current()->tid) {  
+            parent->child_status = thread_current()->exit_status; 
+            parent->waiting_for = -1; 
+            parent->child_creation_success = 0; 
+            sema_up(&parent->sema_wait_child); 
         }
-
     }
-
-    // Close executable file
-    file_close(thread_current()->executable);
-
-    thread_current()->executable = NULL;
+    file_close(thread_current()->executing);
+    thread_current()->executing = NULL;
     thread_current()->parent = NULL;
-
     struct list* process_files = &thread_current()->user_files;
-
-    // Free all open files
     for(struct list_elem* iter = list_begin(process_files);
         iter !=list_end(process_files) ; ){
         struct user_file* file = list_entry(iter, struct user_file , elem);
@@ -183,24 +165,19 @@ process_exit (void) {
         list_remove(&file->elem);
         free(file);
     }
-
-    // Remove all children
-    struct list* children = &thread_current()->children;
-    struct list_elem * iter = list_begin(children);
-    while(iter != list_end(children)) {
+    struct list* Children = &thread_current()->children;
+    struct list_elem * iter = list_begin(Children);
+    while(iter != list_end(Children)) {
         struct thread * child = list_entry(iter,struct thread , child_elem);
         iter = list_next(iter);
         child->parent = NULL;
-        sema_up(&child->parent_child_sync);
+        sema_up(&child->sema_wait_parent);
         list_remove(&child->child_elem);
     }
-
     uint32_t *pd;
-
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
-    pd = cur->pagedir;
-
+    pd = thread_current()->pagedir;
     if (pd != NULL){
         /* Correct ordering here is crucial.  We must set
            cur->pagedir to NULL before switching page directories,
@@ -209,7 +186,7 @@ process_exit (void) {
            directory before destroying the process's page
            directory, or our active page directory will be one
            that's been freed (and cleared). */
-        cur->pagedir = NULL;
+        thread_current()->pagedir = NULL;
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
@@ -360,7 +337,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
     /* Pointer to executable file */
-    thread_current()->executable = file;
+    thread_current()->executing = file;
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -644,4 +621,3 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
- 

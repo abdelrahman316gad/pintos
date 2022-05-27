@@ -116,13 +116,16 @@ struct thread
     bool child_creation_success; /* Flag for parent-child synchronization*/
     int child_status; /* Status of child when it exits */
     tid_t waiting_for; /* tid of the thread i'm waiting for */
-    struct semaphore wait_for_child; /* semaphore for handling waiting for child to exit */
-    struct semaphore parent_child_sync;
+    struct semaphore sema_wait_child; /* semaphore for handling waiting for child to exit */
+    struct semaphore sema_wait_parent;
     
     struct list user_files ;            /* Files opened by thread */
     int exit_status;
-    struct file * executable;           /* Pointer to executable file */
+    struct file * executing;           /* Pointer to executable file */
     struct list_elem child_elem;        /* List element for children List */
+
+
+    
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
