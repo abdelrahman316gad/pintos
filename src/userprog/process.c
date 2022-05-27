@@ -18,10 +18,21 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/syscall.h"
-static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
 struct thread* child_id(tid_t tid);
+static bool load (const char *cmdline, void (**eip) (void), void **esp);
 #define MAX_ARGS_SIZE 4096
+static thread_func start_process NO_RETURN;
+
+static void 
+set_up_stack(struct thread * Parent)
+{
+     struct list* Children = &Parent->children;
+      struct thread* Child = thread_current();
+      list_push_back(Children,&Child->child_elem); 
+       Parent->child_creation_success = 1;
+}
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -59,17 +70,8 @@ process_execute (const char *file_name)
     }  
     return TID_ERROR;
 }
-static void 
-set_up_stack(struct thread * Parent)
-{
-     struct list* Children = &Parent->children;
-      struct thread* Child = thread_current();
-      list_push_back(Children,&Child->child_elem); 
-       Parent->child_creation_success = 1;
-}
-/*
- * Return child with given tid
- * */
+
+/* Return child with given tid */
 struct thread* child_id(tid_t tid){
   struct list* Children = &thread_current()->children;
   struct list_elem *e;
@@ -81,6 +83,33 @@ struct thread* child_id(tid_t tid){
     }
     return NULL;
 }
+
+ 
+/* Waits for thread TID to die and returns its exit status.  If
+   it was terminated by the kernel (i.e. killed due to an
+   exception), returns -1.  If TID is invalid or if it was not a
+   child of the calling process, or if process_wait() has already
+   been successfully called for the given TID, returns -1
+   immediately, without waiting.
+ 
+   This function will be implemented in problem 2-2.  For now, it
+   does nothing. */
+int
+process_wait (tid_t tid )
+{
+    struct thread * cur = thread_current(); 
+    cur-> waiting_for = tid;
+    struct thread* Child = child_id(tid);
+    int status=-1;
+    if(Child != NULL){ 
+        list_remove(&Child->child_elem); 
+        sema_up(&Child->sema_wait_parent); 
+       sema_down(&cur->sema_wait_child); 
+      status = cur->child_status;
+    }
+    return status; 
+}
+
 /* A thread function that loads a user process and starts it
    running. */
 static void
@@ -114,31 +143,7 @@ start_process (void *file_name_)
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
- 
-/* Waits for thread TID to die and returns its exit status.  If
-   it was terminated by the kernel (i.e. killed due to an
-   exception), returns -1.  If TID is invalid or if it was not a
-   child of the calling process, or if process_wait() has already
-   been successfully called for the given TID, returns -1
-   immediately, without waiting.
- 
-   This function will be implemented in problem 2-2.  For now, it
-   does nothing. */
-int
-process_wait (tid_t tid )
-{
-    struct thread * cur = thread_current(); 
-    cur-> waiting_for = tid;
-    struct thread* Child = child_id(tid);
-    int status=-1;
-    if(Child != NULL){ 
-        list_remove(&Child->child_elem); 
-        sema_up(&Child->sema_wait_parent); 
-       sema_down(&cur->sema_wait_child); 
-      status = cur->child_status;
-    }
-    return status; 
-}
+
 /* Free the current process's resources. */
 void
 process_exit (void) {
@@ -256,7 +261,7 @@ struct Elf32_Phdr
     Elf32_Word p_flags;
     Elf32_Word p_align;
   };
- 
+
 /* Values for p_type.  See [ELF1] 2-3. */
 #define PT_NULL    0            /* Ignore. */
 #define PT_LOAD    1            /* Loadable segment. */
@@ -266,19 +271,17 @@ struct Elf32_Phdr
 #define PT_SHLIB   5            /* Reserved. */
 #define PT_PHDR    6            /* Program header table. */
 #define PT_STACK   0x6474e551   /* Stack segment. */
- 
+
 /* Flags for p_flags.  See [ELF3] 2-3 and 2-4. */
 #define PF_X 1          /* Executable. */
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
- 
+
 static bool setup_stack (void **esp);
-void stack_args(void** esp , char* filename_with_args);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
-
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -420,9 +423,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   return success;
 }
 
-/* load() helpers. */
- 
-static bool install_page (void *upage, void *kpage, bool writable);
  
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -468,7 +468,10 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
   /* It's okay. */
   return true;
 }
+ /* load() helpers. */
  
+static bool install_page (void *upage, void *kpage, bool writable);
+
 /* Loads a segment starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
@@ -536,13 +539,14 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
+  if (kpage == NULL) return success;
+  
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success) {
-          *esp = PHYS_BASE;
-      }else
+      if (!success) 
         palloc_free_page (kpage);
+      else
+        *esp = PHYS_BASE;
     }
   return success;
 }
