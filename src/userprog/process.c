@@ -67,7 +67,6 @@ set_up_stack(struct thread * Parent)
       list_push_back(Children,&Child->child_elem); 
        Parent->child_creation_success = 1;
 }
-
 /*
  * Return child with given tid
  * */
@@ -143,7 +142,6 @@ process_wait (tid_t tid )
 /* Free the current process's resources. */
 void
 process_exit (void) {
-    
     if (thread_current()->parent != NULL ) {
         struct thread *parent = thread_current()->parent;
         if (parent->waiting_for == thread_current()->tid) {  
@@ -165,14 +163,14 @@ process_exit (void) {
         list_remove(&file->elem);
         free(file);
     }
-    struct list* Children = &thread_current()->children;
-    struct list_elem * iter = list_begin(Children);
-    while(iter != list_end(Children)) {
-        struct thread * child = list_entry(iter,struct thread , child_elem);
-        iter = list_next(iter);
-        child->parent = NULL;
-        sema_up(&child->sema_wait_parent);
-        list_remove(&child->child_elem);
+  struct list* Children = &thread_current()->children;
+  struct list_elem *e2;
+  for (e2 = list_begin (Children); e2!= list_end (Children); e2 = list_next (e2))
+    {
+      struct thread *t = list_entry (e2, struct thread, child_elem);
+      t->parent = NULL;
+      sema_up(&t->sema_wait_parent);
+      list_remove(&t->child_elem);
     }
     uint32_t *pd;
     /* Destroy the current process's page directory and switch back
@@ -190,13 +188,7 @@ process_exit (void) {
         pagedir_activate(NULL);
         pagedir_destroy(pd);
     }
-
 }
- 
-
- 
- 
- 
 /* Sets up the CPU for running user code in the current
    thread.
    This function is called on every context switch. */
@@ -409,7 +401,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
 
    /* Push stack args */
-    get_stack_args(fn_copy_2, esp, &save_ptr);
+    set_stack(fn_copy_2, esp, &save_ptr);
     free(fn_copy_2); // free file name copy
  
   /* Start address. */
@@ -555,7 +547,7 @@ setup_stack (void **esp)
  
 
 
-void get_stack_args(char* token, void **esp, char **save_ptr){
+void set_stack(char* token, void **esp, char **save_ptr){
 
 int args_pushed;
   int argc = 0;
