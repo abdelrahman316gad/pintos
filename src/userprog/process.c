@@ -151,6 +151,16 @@ process_exit (void) {
             sema_up(&parent->sema_wait_child); 
         }
     }
+    struct list* Children = &thread_current()->children;
+  struct list_elem *e2;
+  for (e2 = list_begin (Children); e2!= list_end (Children); e2 = list_next (e2))
+    {
+      struct thread *t = list_entry (e2, struct thread, child_elem);
+      t->parent = NULL;
+      sema_up(&t->sema_wait_parent);
+      list_remove(&t->child_elem);
+    }
+
     file_close(thread_current()->executing);
     thread_current()->executing = NULL;
     thread_current()->parent = NULL;
@@ -163,15 +173,7 @@ process_exit (void) {
         list_remove(&file->elem);
         free(file);
     }
-  struct list* Children = &thread_current()->children;
-  struct list_elem *e2;
-  for (e2 = list_begin (Children); e2!= list_end (Children); e2 = list_next (e2))
-    {
-      struct thread *t = list_entry (e2, struct thread, child_elem);
-      t->parent = NULL;
-      sema_up(&t->sema_wait_parent);
-      list_remove(&t->child_elem);
-    }
+  
     uint32_t *pd;
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
