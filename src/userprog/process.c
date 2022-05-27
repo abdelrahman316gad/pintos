@@ -21,6 +21,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 struct thread* child_id(tid_t tid);
+#define MAX_ARGS_SIZE 4096
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -65,6 +66,21 @@ set_up_stack(struct thread * Parent)
       struct thread* Child = thread_current();
       list_push_back(Children,&Child->child_elem); 
        Parent->child_creation_success = 1;
+}
+
+/*
+ * Return child with given tid
+ * */
+struct thread* child_id(tid_t tid){
+  struct list* Children = &thread_current()->children;
+  struct list_elem *e;
+  for (e = list_begin (Children); e != list_end (Children); e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      if (t->tid == tid)
+        return t;
+    }
+    return NULL;
 }
 /* A thread function that loads a user process and starts it
    running. */
@@ -115,30 +131,14 @@ process_wait (tid_t tid )
     struct thread * cur = thread_current(); 
     cur-> waiting_for = tid;
     struct thread* Child = child_id(tid);
+    int status=-1;
     if(Child != NULL){ 
         list_remove(&Child->child_elem); 
         sema_up(&Child->sema_wait_parent); 
        sema_down(&cur->sema_wait_child); 
-        return cur->child_status;
+      status = cur->child_status;
     }
-    return -1; 
-}
-
-/*
- * Return child with given tid
- * */
-struct thread* child_id(tid_t tid){
-
-    struct list* Children = &thread_current()->children;
-    struct list_elem *iter = list_begin(Children);
-    while (iter != list_end(Children)){
-        struct thread *entry = list_entry(iter,struct thread, child_elem);
-        iter = list_next(iter);
-        if(entry->tid == tid){
-            return entry;
-        }
-    }
-    return NULL;
+    return status; 
 }
 /* Free the current process's resources. */
 void
@@ -298,25 +298,31 @@ load (const char *file_name, void (**eip) (void), void **esp)
   struct file *file = NULL;
   off_t file_ofs;
   bool success = false;
-  char *fn_copy;
-  char *save_ptr;
-  int name_length = strlen (file_name)+1;
-  fn_copy = malloc (name_length);
-  strlcpy(fn_copy, file_name, name_length);
-  fn_copy = strtok_r (fn_copy, " ", &save_ptr); // Copy of file name
-
- 
   int i;
  
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
- 
+  char *fn_copy_2;
+  char *save_ptr;
+  //int name_length = strlen (file_name)+1;
+  //fn_copy = malloc (name_length);
+  //strlcpy(fn_copy, file_name, name_length);
+  //fn_copy = strtok_r (fn_copy, " ", &save_ptr); 
+
+  fn_copy_2 = malloc ( strlen(file_name) + 1);
+    if (fn_copy_2 == NULL)
+    {
+      palloc_free_page (fn_copy_2);
+      return TID_ERROR;
+    }
+    strlcpy (fn_copy_2, file_name, PGSIZE);
+  fn_copy_2 = strtok_r (fn_copy_2, " ", &save_ptr);
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
 
 
-  file = filesys_open (fn_copy);
+  file = filesys_open (fn_copy_2);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -332,7 +338,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", fn_copy);
+      printf ("load: %s: error loading executable\n", fn_copy_2);
       goto done;
     }
 
@@ -403,8 +409,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
 
    /* Push stack args */
-    get_stack_args(fn_copy, esp, &save_ptr);
-    free(fn_copy); // free file name copy
+    get_stack_args(fn_copy_2, esp, &save_ptr);
+    free(fn_copy_2); // free file name copy
  
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -549,56 +555,67 @@ setup_stack (void **esp)
  
 
 
-void get_stack_args(char *file_name, void **esp, char **save_ptr){
+void get_stack_args(char* token, void **esp, char **save_ptr){
+
+int args_pushed;
+  int argc = 0;
+  void* stack_pointer;
+
+  stack_pointer = *esp;
+
+  /* Tokenise file name and push each token on the stack. */
+  do                                                                            
+     {                                                                           
+       size_t len = strlen (token) + 1;                                          
+       stack_pointer = (void*) (((char*) stack_pointer) - len);                  
+       strlcpy ((char*)stack_pointer, token, len);                               
+       argc++;                                   
+       /* Don't push anymore arguments if maximum allowed 
+          have already been pushed. */
+       if (PHYS_BASE - stack_pointer > MAX_ARGS_SIZE)
+          return 0;                              
+       token = strtok_r (NULL, " ", save_ptr);                                  
+     } while (token != NULL);
+  
+  char *arg_ptr = (char*) stack_pointer;                                      
+  
+  /* Round stack pionter down to a multiple of 4. */
+  stack_pointer = (void*) (((intptr_t) stack_pointer) & 0xfffffffc);
+
+  /* Push null sentinel. */
+  stack_pointer = (((char**) stack_pointer) - 1);
+  *((char*)(stack_pointer)) = 0;
+
+  /* Push pointers to arguments. */
+  args_pushed = 0;                                                              
+  while (args_pushed < argc)                                                    
+     {                                                                           
+       while (*(arg_ptr - 1) != '\0')                                            
+         ++arg_ptr;                                                              
+       stack_pointer = (((char**) stack_pointer) - 1);                           
+       *((char**) stack_pointer) = arg_ptr;                                      
+       ++args_pushed;    
+       ++arg_ptr;                                                        
+     }
+
+  /* Push argv. */
+  char** first_arg_pointer = (char**) stack_pointer;
+  stack_pointer = (((char**) stack_pointer) - 1);
+  *((char***) stack_pointer) = first_arg_pointer;
 
 
-    void * stack_pointer = *esp;
-    int number_of_args=0;
-    char * ptr = file_name;
-    int all_args_size = 0;
-    /* Push args to stack */
-    while (ptr != NULL){
-        stack_pointer -= (strlen(ptr) + 1);
-        memcpy(stack_pointer, ptr, strlen(ptr) + 1);
-        all_args_size += strlen(ptr) + 1;
-        number_of_args++;
-        ptr = strtok_r(NULL, " ", save_ptr);
-    }
+  /* Push argc. */
+  int* stack_int_pointer = (int*) stack_pointer;
+  --stack_int_pointer;
+  *stack_int_pointer = argc;
+  stack_pointer = (void*) stack_int_pointer;
 
-    char * stack_args = stack_pointer;
-    /* Push zeros as word-align */
-    int align = (4 - (all_args_size%4) )%4;
-    if(align != 0) {
-        stack_pointer -= align;
-        memset(stack_pointer, 0, align);
-    }
-    /* Push NULL pointer at end of args */
-    stack_pointer -= sizeof(char *);
-    memset(stack_pointer,0,1);
+  /* Push null sentinel. */
+  stack_pointer = (((void**) stack_pointer) - 1);
+  *((void**)(stack_pointer)) = 0;
 
-    /* Push addresses of args */
-    for(int i = number_of_args-1 ; i>=0 ; i--){
-        stack_pointer -=  sizeof(char *);
-        *(char**)stack_pointer = stack_args;
-        stack_args += (strlen(stack_args)+1);
-    }
-
-
-
-   /* Push address of first address */
-    char** address = (char**)stack_pointer;
-    stack_pointer -= sizeof(char**);
-    *(char***)stack_pointer = address;
-
-   /* Push number of args */
-    stack_pointer -= sizeof(int);
-    *(int *)stack_pointer = number_of_args;
-
-    /* Push NULL as a return address */
-    stack_pointer -= sizeof(int *);
-    *(int**)stack_pointer = 0;
-    *esp = stack_pointer;
-    return;
+  *esp = stack_pointer;
+  return 1;
 }
 
 
