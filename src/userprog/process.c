@@ -142,26 +142,33 @@ process_wait (tid_t tid )
 /* Free the current process's resources. */
 void
 process_exit (void) {
-  struct thread *cur =thread_current();
     if (thread_current()->parent != NULL ) {
-      
-        struct thread *parent = cur->parent;
-        if (parent->waiting_for == cur->tid) {  
-           parent->child_creation_success = 0;
-            parent->child_status = cur->exit_status; 
+        struct thread *parent = thread_current()->parent;
+        if (parent->waiting_for == thread_current()->tid) {  
+            parent->child_status = thread_current()->exit_status; 
             parent->waiting_for = -1; 
+            parent->child_creation_success = 0; 
             sema_up(&parent->sema_wait_child); 
         }
     }
-    
-    file_close(cur->executing);
-    cur->executing = NULL;
-    cur->parent = NULL;
+    struct list* Children = &thread_current()->children;
+  struct list_elem *e2;
+  for (e2 = list_begin (Children); e2!= list_end (Children); e2 = list_next (e2))
+    {
+      struct thread *t = list_entry (e2, struct thread, child_elem);
+      t->parent = NULL;
+      sema_up(&t->sema_wait_parent);
+      list_remove(&t->child_elem);
+    }
+
+    file_close(thread_current()->executing);
+    thread_current()->executing = NULL;
+    thread_current()->parent = NULL;
     struct list* process_files = &thread_current()->user_files;
-    for(struct list_elem* e = list_begin(process_files);
-        e !=list_end(process_files) ; ){
-        struct user_file* file = list_entry(e, struct user_file , elem);
-        e=list_next(e);
+    for(struct list_elem* iter = list_begin(process_files);
+        iter !=list_end(process_files) ; ){
+        struct user_file* file = list_entry(iter, struct user_file , elem);
+        iter=list_next(iter);
         file_close(file->file);
         list_remove(&file->elem);
         free(file);
