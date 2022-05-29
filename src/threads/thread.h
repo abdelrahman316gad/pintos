@@ -107,12 +107,11 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct thread *thread_waiting_for;
- //   struct thread *parent ;             /*parent of this thread*/
     struct list threads_waiting;
     struct list_elem wait_elem;
 
-    struct thread* parent;
-    struct list children;
+    struct thread* parent;          /*parent of this thread*/
+    struct list children;           /*List of children for this thread*/
     bool child_creation_success; /* Flag for parent-child synchronization*/
     int child_status; /* Status of child when it exits */
     tid_t waiting_for; /* tid of the thread i'm waiting for */

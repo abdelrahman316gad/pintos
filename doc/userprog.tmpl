@@ -8,9 +8,10 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Abdelrahman Elsayed Ahmed 19015893
+Abdelrahman Elsayed Gad 19015894
+Abdelaziz Mohmed Abdelaziz 19015941
+Omar Khayrat Mohamed 19016063
 
 ---- PRELIMINARIES ----
 
@@ -30,20 +31,41 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+No changes
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe how you implemented argument parsing.  How do
 >> you arrange for the elements of argv[] to be in the right order?
 >> How do you avoid overflowing the stack page?
 
+in process_execute(): We are making 2 copies of the file_name with the arguments,
+one are passed into "thread_create()" , and the other is passed to "start_process()"
+
+start_process(): We send the file_name string to the "load()" function to split the file name from the arguments,
+then load the file, then we call "setup_stack()" to set up the thred stack and save it at the thred,
+the stack pointer then moved by 4 to make the stack have length of 4,
+then we push the system call and the arguments at the original order to the stack. 
+
+
 ---- RATIONALE ----
 
 >> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+because strtok_r() is thread safe because it uses an extra argument that maintains the current position in the string to tokenise,
+strtok() uses global buufer so it is not thread safe
+
 
 >> A4: In Pintos, the kernel separates commands into a executable name
 >> and arguments.  In Unix-like systems, the shell does this
 >> separation.  Identify at least two advantages of the Unix approach.
 
+The Unix-like systems' shell have aliases for executable names,so you can type the name without the full path 
+because the full path is stored at PATH variable for convenience.
+
+Also support multiple commands like passing the output of one command to the other.
+
+ 
                  SYSTEM CALLS
                  ============
 
@@ -53,14 +75,50 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+At "thred.h" :
+in "struct thread" :
+    struct thread* parent;          /*parent of this thread*/
+    struct list children;           /*List of children for this thread*/
+    bool child_creation_success; 	/* Flag for parent-child synchronization*/
+    int child_status; 				/* Status of child when it exits */
+    tid_t waiting_for; 				/* tid of the thread i'm waiting for */
+    struct semaphore sema_wait_child; 		/* semaphore for handling waiting for child to exit */
+    struct semaphore sema_wait_parent;		/*semaphore for handling waiting for parent to exit */
+    struct list user_files ;            /* Files opened by thread */
+    int exit_status;
+    struct file * executing;           /* Pointer to executable file */
+    struct list_elem child_elem;        /* List element for children List */
+
+ Adding new struct  "user_file"
+    struct list_elem elem;		/* List elem for a thread's file list */
+    int fd ;					/*file descriptors*/
+    struct  file *  file  ;  	/* pointer to the actual file */
+
+
 >> B2: Describe how file descriptors are associated with open files.
 >> Are file descriptors unique within the entire OS or just within a
 >> single process?
+
+"get_file()" function in syscall.c works with the same logic of "allocate_tid()" from thread.c
+it gets the unique fd for the file.
+There no point in having the same file descriptor for different processes. 
+
 
 ---- ALGORITHMS ----
 
 >> B3: Describe your code for reading and writing user data from the
 >> kernel.
+
+We just verify if the address is in the user space for each access, 
+as instructed in the specification. It's enough to check whether the start
+and end addresses are below PYS_BASE when we have strings to read or write. 
+We verify that all parameters are in user space for each system call.
+If there is an incorrect pointer or an unmapped page, 
+the page fault handler is called, and the process is terminated.
+This method appears to be faster since it makes use of the processor's MMU. 
+Only in the case of a kernel signal do we proceed to cause a page fault 
+in the page fault handler.
+
 
 >> B4: Suppose a system call causes a full page (4,096 bytes) of data
 >> to be copied from user space into the kernel.  What is the least
@@ -69,8 +127,51 @@ FirstName LastName <email@domain.example>
 >> for a system call that only copies 2 bytes of data?  Is there room
 >> for improvement in these numbers, and how much?
 
+We'll look at how many calls are required to set up the stack and load 
+the program arguments. Because each user page is an alias for a kernel page,
+we always have four inspections for these actions.
+
+That value is simply dependent on whether the data spans one or two pages after
+the initialization stage. We examine each page once, hence the least number 
+of function calls for 4,096 bytes is 1 and the most is 2. If we merely want to
+write two bytes, the scenario is similar, and if we have a byte on each page,
+we may still have to do two page checks.
+
+Loading the parts of the program in a sluggish manner is one technique to improve 
+these figures. So, if our access is invalid, we don't have to load all of 
+the pages ahead of time. In the average scenario, where all accesses are valid,
+this does not provide any benefit.
+
+
 >> B5: Briefly describe your implementation of the "wait" system call
 >> and how it interacts with process termination.
+
+We added some new fields to the thread structure, such as a list of offspring 
+and a reference to its parent, to implement the "wait" system call. Additionally, 
+each thread includes a ret status variable that is initialised with a default 
+status and is updated on the exit system call or if a loading problem occurs.
+We also keep track of whether or not the process has waited and where it is 
+currently active.
+
+We start process wait when the "wait" system function is used. From the list 
+of all threads, we first select the thread with the correct tid. We just return
+an error if we can't find the thread, the child thread has a different parent, 
+or we've already waited for it.
+
+The second scenario is when the child thread has completed its task and decides 
+to wait before quitting, knowing that the parent thread may still call wait. 
+After that, we simply return the child's final status and proceed.
+It's worth noting that even if a kid has already quit, it's still necessary 
+to wait on semaphore until his parent has exited before freeing its thread
+structure and obtaining its return status.
+
+When the child thread is still operating, we set the current thread to wait with 
+sima down on the sema wait semaphore called when the child thread exits.
+To ensure that the synchronisation works as planned in all circumstances,
+we utilise two paired semaphore for exit and wait. As a result, when a child
+quits,we ensure that the waiting parent receives its return status and 
+that the child waits for its parent to exit before freeing the thread structure.
+
 
 >> B6: Any access to user program memory at a user-specified address
 >> can fail due to a bad pointer value.  Such accesses must cause the
@@ -86,12 +187,50 @@ FirstName LastName <email@domain.example>
 >> paragraphs, describe the strategy or strategies you adopted for
 >> managing these issues.  Give an example.
 
+We can safeguard a system call from an invalid access in two methods. 
+Before initiating the call, we check in the system call handler that all of the parameters
+are in user space, as explained previously. We additionally check the buffer spans
+in user space when making write or read sys calls. We ensure that the file is owned 
+by the current thread and utilize a file lock to synchronize access on file handling calls. 
+Second, the page fault handle was changed to detect an invalid access or an unmapped page. 
+Following the exit sys call, the process will be terminated because of all of these tests.
+
+In the sys exit, we ensure that any resources retained by the current process are released. 
+If an error occurs during a file access, we first release the file lock. We then loop 
+through all its open files, freeing the user file structure and removing it from the thread file list. 
+Thread exit is then called by the function. We clean the children list and execute 
+a semaphore up on all threads' children. Then we call process exit, which will wait 
+for its parent if necessary and then remove all the waiters threads. 
+Finally, we switch page directories and give it its own directory to work with.
+
+During the write system call, for example, we can get an invalid pointer value. 
+The page fault handler or the first checks will capture this. We'll call sys exit, 
+thread exit, and then process execute in either scenario. This logic will delete
+all children mappings and free all process resources, including all files, locks, 
+semaphores, page directory, and structure thread, as explained previously.
+
+
 ---- SYNCHRONIZATION ----
 
 >> B7: The "exec" system call returns -1 if loading the new executable
 >> fails, so it cannot return before the new executable has completed
 >> loading.  How does your code ensure this?  How is the load
 >> success/failure status passed back to the thread that calls "exec"?
+
+To establish synchronization between the parent and child processes, we use a semaphore. 
+After the child thread is formed, the parent is semaphore down until the child calls 
+semaphore up after the loading is complete. Before the parent is awakened by the 
+semaphore action, the child return status is set to error if the load is unsuccessful. 
+As a result, the parent thread will know if the child thread started correctly 
+before returning from exec and will provide a valid tid or -1 as required.
+
+We were able to decrease the memory used by the structure thread by using 
+the same semaphore from process wait. The parent can wait for loading or 
+the actual system "wait" call because the kid only conducts a semaphore up 
+when loading or quitting. Even if the load is unsuccessful, the load and 
+exit semaphore up actions are always performed in this order, preventing 
+a race condition in the parent thread.
+
 
 >> B8: Consider parent process P with child process C.  How do you
 >> ensure proper synchronization and avoid race conditions when P
@@ -100,16 +239,77 @@ FirstName LastName <email@domain.example>
 >> terminates without waiting, before C exits?  After C exits?  Are
 >> there any special cases?
 
+We set the current thread to wait on the 'sema_wait' semaphore when the parent
+process P calls wait on the child process C before C terminates. C will perform 
+semaphore up and release the parent thread when it exits. We used two semaphores 
+for wait and exit to ensure perfect synchronization and avoid race circumstances. 
+As a result, when process C quits, it will allow P to retrieve its return status 
+before removing the thread structure.
+
+When a child thread completes its task and reaches the process exit function, 
+it will wait on the semaphore down until its parent has departed before destroying 
+its thread structure so that the parent can still receive its return status.
+
+C will put sema_up on semaphore 'sema_wait' when P quits without waiting, 
+and it will not wait on sema_down for sema_exit, because P has already 
+given up the semaphore when it completed. After C exits, if P terminates 
+without waiting, C will wait until P has completed before freeing the 
+thread structure.
+
+This logic will free all the resources held by the process and thread in 
+process_exit and thread_exit, respectively, as detailed in B6.
+
+The starting thread, which runs the kernel, is an exception. Because the 
+kernel thread will not use an exit system call, all of its descendants 
+will not wait for it.
+
+
+
 ---- RATIONALE ----
 
 >> B9: Why did you choose to implement access to user memory from the
 >> kernel in the way that you did?
 
+We utilize the function is_user_vaddr to access user memory from the kernel, 
+which tests if the address is in user space for each access. It's enough to 
+verify if the start and end addresses are below PHYS BASE for system calls 
+that require memory, such as read and write. We check if the arguments are 
+inside the user area for the rest of the system calls. We verify it in the 
+page fault handler and end the executing process if there is an incorrect 
+pointer or an unmapped page. Only in the case of a kernel signal do we 
+proceed to cause a page fault in the page_fault handler.
+
+Because of its simplicity and unity, we decided to implement it this manner. 
+This method appears to be faster since it makes use of the processor's MMU. 
+Another benefit is that it has the ability to reduce resource waste. 
+We check the address provided for each call, and if it is invalid, 
+the process is destroyed rather than being allowed to run for a period of time.
+
+
 >> B10: What advantages or disadvantages can you see to your design
 >> for file descriptors?
 
+In our systems, each process keeps track of all open user files, 
+each with its own fd.
+
+The benefits include not having to go through all files to see if a file 
+belongs to the current thread. We can also get a list of all files for 
+a thread quickly. In terms of memory, it's also pretty efficient because 
+we only have to save a pointer to the file's structure per thread, in addition 
+to the opened file and its accompanying fd.
+
+Our technique has the drawback of having to cycle through all of a thread's 
+files for each operation, but this isn't a major deal because the list is 
+usually short. We examined various options, such as maintaining an array 
+for access, but this would waste resources and limit the number of files 
+that could be accessed.
+
+
 >> B11: The default tid_t to pid_t mapping is the identity mapping.
 >> If you changed it, what advantages are there to your approach?
+
+For the sake of clarity, we used the default implementation because we 
+couldn't see any significant benefit in building an auxiliary mapping.
 
                SURVEY QUESTIONS
                ================
